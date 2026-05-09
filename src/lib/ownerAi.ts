@@ -52,8 +52,9 @@ function ownerAiConfig() {
   const model = process.env.OWNER_AI_MODEL || DEFAULT_MODEL;
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
   const geminiModel = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+  const isHosted = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
 
-  return { baseUrl, model, geminiApiKey, geminiModel };
+  return { baseUrl, model, geminiApiKey, geminiModel, allowRemote, configuredBaseUrl, isHosted };
 }
 
 function splitGeminiMessages(messages: ChatMessage[]) {
@@ -285,7 +286,8 @@ export async function ownerAiChatCompletion({
   tools?: ToolDefinition[];
   toolChoice?: { name: string };
 }) {
-  const { baseUrl, model, geminiApiKey, geminiModel } = ownerAiConfig();
+  const { baseUrl, model, geminiApiKey, geminiModel, allowRemote, configuredBaseUrl, isHosted } =
+    ownerAiConfig();
 
   if (geminiApiKey) {
     return geminiChatCompletion({
@@ -295,7 +297,19 @@ export async function ownerAiChatCompletion({
       toolChoice,
       apiKey: geminiApiKey,
       model: geminiModel,
-    });
+    }).then((result) => ({ ...result, provider: "gemini" as const }));
+  }
+
+  if (isHosted && (!allowRemote || configuredBaseUrl === DEFAULT_BASE_URL)) {
+    return {
+      response: Response.json(
+        {
+          error:
+            "Hosted deployments cannot use the local Owner AI server at 127.0.0.1. Add GEMINI_API_KEY in Vercel, or set OWNER_AI_BASE_URL to a public OpenAI-compatible endpoint and OWNER_AI_ALLOW_REMOTE=true, then redeploy.",
+        },
+        { status: 503 },
+      ),
+    };
   }
 
   const body: Record<string, unknown> = {
@@ -337,18 +351,30 @@ export async function ownerAiChatCompletion({
     };
   }
 
-  return { upstream };
+  return { upstream, provider: "owner-ai" as const };
 }
 
-export async function ownerAiErrorResponse(upstream: Response) {
+export async function ownerAiErrorResponse(upstream: Response, provider: "gemini" | "owner-ai" = "owner-ai") {
   const text = await upstream.text();
 
   if (upstream.status === 401 || upstream.status === 403) {
     console.error("Owner AI rejected request", upstream.status, text);
+    if (provider === "gemini") {
+      return Response.json(
+        {
+          error:
+            "Gemini rejected the request. Check GEMINI_API_KEY in Vercel, make sure the key is valid, and redeploy after changing environment variables.",
+          status: upstream.status,
+          providerError: text,
+        },
+        { status: upstream.status },
+      );
+    }
+
     return Response.json(
       {
         error:
-          "Owner AI request was rejected by a non-local provider. This app now forces http://127.0.0.1:8765/v1 unless OWNER_AI_ALLOW_REMOTE=true. Restart `npm run dev`.",
+          "Owner AI provider rejected the request. For a remote OpenAI-compatible provider, set OWNER_AI_ALLOW_REMOTE=true and verify OWNER_AI_BASE_URL, OWNER_AI_MODEL, and provider credentials in Vercel.",
         status: upstream.status,
         providerError: text,
       },

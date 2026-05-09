@@ -14,14 +14,14 @@ export const Route = createFileRoute("/api/chat")({
             messages: { role: "user" | "assistant"; content: string }[];
           };
 
-          const { upstream, response } = await ownerAiChatCompletion({
+          const { upstream, response, provider } = await ownerAiChatCompletion({
             stream: true,
             messages: [{ role: "system", content: OWNER_AI_SYSTEM_PROMPT }, ...messages],
           });
           if (response) return response;
 
           if (!upstream.ok) {
-            return ownerAiErrorResponse(upstream);
+            return ownerAiErrorResponse(upstream, provider);
           }
 
           return new Response(upstream.body, {

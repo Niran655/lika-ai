@@ -73,7 +73,7 @@ export const Route = createFileRoute("/api/analyze")({
                   },
                 };
 
-          const { upstream, response } = await ownerAiChatCompletion({
+          const { upstream, response, provider } = await ownerAiChatCompletion({
             messages: [
               { role: "system", content: PROMPTS[mode] },
               { role: "user", content: content.slice(0, 30000) },
@@ -84,7 +84,7 @@ export const Route = createFileRoute("/api/analyze")({
           if (response) return response;
 
           if (!upstream.ok) {
-            return ownerAiErrorResponse(upstream);
+            return ownerAiErrorResponse(upstream, provider);
           }
 
           const json = await upstream.json();
