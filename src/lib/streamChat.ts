@@ -26,6 +26,9 @@ export async function streamChat({
       try {
         const j = await resp.json();
         if (j?.error) msg = j.error;
+        if (j?.providerError) {
+          msg += `\n\nProvider details: ${j.providerError}`;
+        }
       } catch {}
       throw new Error(msg);
     }
