@@ -16,6 +16,7 @@ dist-ssr
 .nitro
 *.local
 
+.env
 # Local Owner AI training memory
 data/*.jsonl
 
